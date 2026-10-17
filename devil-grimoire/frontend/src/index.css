@@ -1,0 +1,207 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   DEVIL GRIMOIRE — Dual Theme Design System (Light & Dark)
+   QuickNode-inspired developer infrastructure aesthetic:
+   - Light: Warm neutral backgrounds, crisp white surfaces, charcoal typography
+   - Dark: Deep slate/obsidian surfaces, layered elevation, high-contrast text
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── Light Mode Semantic Tokens ────────────────────────────────────────── */
+  --bg-page: #F8F8F6;
+  --bg-surface: #FFFFFF;
+  --bg-subtle: #F1F1EF;
+  --bg-nested: #F8F8F6;
+  --border-color: #D8D8D5;
+  --border-light: #EBEBEA;
+  --border-hover: #A8A8A4;
+  --text-main: #242424;
+  --text-muted: #666666;
+  --text-dim: #8E8E8A;
+  --accent-green: #39E75F;
+  --accent-green-dark: #10B981;
+  --dot-grid-color: #D5D5D2;
+  --dot-grid-subtle: #E2E2DF;
+  --chart-grid: #EAEAE7;
+  --chart-axis: #C8C8C5;
+  --tooltip-bg: #FFFFFF;
+  --tooltip-border: #D8D8D5;
+  --tooltip-text: #242424;
+  --tooltip-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+}
+
+.dark {
+  /* ── Dark Mode Semantic Tokens ─────────────────────────────────────────── */
+  --bg-page: #0F1115;
+  --bg-surface: #181B22;
+  --bg-subtle: #20242D;
+  --bg-nested: #13161C;
+  --border-color: #303541;
+  --border-light: #252A36;
+  --border-hover: #4B5569;
+  --text-main: #ECEFF4;
+  --text-muted: #A3ABB8;
+  --text-dim: #6C7689;
+  --accent-green: #39E75F;
+  --accent-green-dark: #10B981;
+  --dot-grid-color: #232834;
+  --dot-grid-subtle: #1C202A;
+  --chart-grid: #242936;
+  --chart-axis: #444D5F;
+  --tooltip-bg: #1A1E26;
+  --tooltip-border: #363C4A;
+  --tooltip-text: #ECEFF4;
+  --tooltip-shadow: 0 4px 18px rgba(0, 0, 0, 0.4);
+}
+
+/* Crisp technical scrollbar */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-subtle);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 2px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* Global selection */
+::selection {
+  background: rgba(57, 231, 95, 0.3);
+  color: var(--text-main);
+}
+
+/* ── QuickNode Dot Grid Background Pattern (Theme-aware) ─────────────────── */
+.bg-dot-grid {
+  background-image: radial-gradient(var(--dot-grid-color) 1.2px, transparent 1.2px);
+  background-size: 20px 20px;
+}
+
+.bg-dot-grid-subtle {
+  background-image: radial-gradient(var(--dot-grid-subtle) 1px, transparent 1px);
+  background-size: 16px 16px;
+}
+
+@layer components {
+  /* ── Technical Infrastructure Card ─────────────────────────────────────── */
+  .qn-card {
+    background-color: var(--bg-surface);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+    color: var(--text-main);
+    transition: background-color 0.2s ease, border-color 0.2s ease;
+  }
+
+  .qn-card-hover {
+    @apply qn-card transition-all duration-150;
+  }
+
+  .qn-card-hover:hover {
+    border-color: var(--border-hover);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  }
+
+  /* ── Editorial Section Label (e.g. // 01. SENSOR DIAGNOSTICS) ──────────── */
+  .editorial-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  /* ── Status Dots ───────────────────────────────────────────────────────── */
+  .status-dot-live {
+    width: 7px;
+    height: 7px;
+    border-radius: 9999px;
+    background-color: #39E75F;
+    box-shadow: 0 0 0 2px rgba(57, 231, 95, 0.25);
+    animation: livePulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  .status-dot-warning {
+    width: 7px;
+    height: 7px;
+    border-radius: 9999px;
+    background-color: #D97706;
+    box-shadow: 0 0 0 2px rgba(217, 119, 6, 0.25);
+  }
+
+  .status-dot-danger {
+    width: 7px;
+    height: 7px;
+    border-radius: 9999px;
+    background-color: #DC2626;
+    box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.25);
+  }
+
+  /* ── Monospace Metric Tile ─────────────────────────────────────────────── */
+  .telemetry-val {
+    font-family: 'JetBrains Mono', monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ── Legacy class bridges for zero regression ─────────────────────────── */
+  .glass-card {
+    @apply qn-card;
+  }
+
+  .glass-card-hover {
+    @apply qn-card-hover;
+  }
+}
+
+@keyframes livePulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(0.9);
+  }
+}
+
+/* ── Recharts Clean Infrastructure Styling (Theme-aware) ─────────────────── */
+.recharts-cartesian-grid-horizontal line,
+.recharts-cartesian-grid-vertical line {
+  stroke: var(--chart-grid);
+  stroke-width: 1;
+}
+
+.recharts-text {
+  fill: var(--text-muted) !important;
+  font-family: 'JetBrains Mono', monospace !important;
+  font-size: 11px !important;
+}
+
+.recharts-tooltip-wrapper {
+  outline: none !important;
+}
+
+/* Theme-aware Popover Tooltip for Telemetry Charts */
+.custom-tooltip-qn {
+  background-color: var(--tooltip-bg);
+  border: 1px solid var(--tooltip-border);
+  border-radius: 4px;
+  padding: 8px 12px;
+  box-shadow: var(--tooltip-shadow);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--tooltip-text);
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
