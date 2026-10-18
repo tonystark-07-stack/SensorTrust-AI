@@ -228,17 +228,82 @@ def _generate_excessive_noise(n: int) -> list[dict]:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# REAL INTEL BERKELEY LAB DATASET AUGMENTATION
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _generate_from_intel(intel_csv_path: str, n_samples_per_class: int = 1500) -> list[dict]:
+    """
+    Extract training samples directly from the real Intel Berkeley Research Lab dataset,
+    combining real hardware noise distributions and room acoustics with fault injections.
+    """
+    if not os.path.exists(intel_csv_path):
+        print(f"  [!] Intel dataset not found at {intel_csv_path}. Skipping.")
+        return []
+
+    print(f"\n[2/5] Extracting training samples from real Intel dataset ({intel_csv_path})...")
+    df_intel = pd.read_csv(intel_csv_path)
+    sensor_cols = [c for c in df_intel.columns if c.lower() not in ("timestamp", "time", "tick", "index", "label")]
+    data_matrix = df_intel[sensor_cols].values
+    total_ticks = len(data_matrix)
+    num_sensors = len(sensor_cols)
+    
+    samples = []
+    
+    for class_idx, class_name in enumerate(CLASS_LABELS):
+        print(f"  → Generating {n_samples_per_class} real Intel {class_name} samples...")
+        for _ in range(n_samples_per_class):
+            start_idx = np.random.randint(0, max(1, total_ticks - SEQUENCE_LENGTH))
+            segment = data_matrix[start_idx : start_idx + SEQUENCE_LENGTH].copy()
+            
+            target_col = np.random.randint(0, num_sensors)
+            target = segment[:, target_col].copy()
+            peer_cols = [c for c in range(num_sensors) if c != target_col]
+            peers = [segment[:, c].copy() for c in peer_cols]
+            
+            if class_name == "Normal":
+                pass
+            elif class_name == "Spike":
+                target[-1] += np.random.uniform(8.0, 15.0)
+            elif class_name == "Drift":
+                drift_rate = np.random.uniform(0.02, 0.04)
+                target += np.arange(SEQUENCE_LENGTH) * drift_rate
+            elif class_name == "Env Event":
+                shift_mag = np.random.uniform(3.0, 6.0)
+                shift_start = np.random.randint(SEQUENCE_LENGTH // 2, SEQUENCE_LENGTH - 10)
+                ramp_len = SEQUENCE_LENGTH - shift_start
+                ramp = np.linspace(0, shift_mag, ramp_len)
+                target[shift_start:] += ramp
+                for p in peers:
+                    p[shift_start:] += ramp
+            elif class_name == "Stuck-At":
+                stuck_len = np.random.randint(15, 30)
+                target[-stuck_len:] = target[-stuck_len]
+            elif class_name == "Excessive Noise":
+                noise_mult = np.random.uniform(5.0, 15.0)
+                noise_len = np.random.randint(15, 30)
+                target[-noise_len:] += np.random.normal(0, 0.08 * noise_mult, noise_len)
+            
+            features = compute_features(target, peers)
+            features["label"] = class_idx
+            samples.append(features)
+            
+        print(f"    ✓ {n_samples_per_class} Intel {class_name} samples generated.")
+        
+    return samples
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # MAIN TRAINING PIPELINE
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def main():
     print("=" * 70)
-    print("  DEVIL GRIMOIRE — Model Training Pipeline")
-    print("  100-Tree Random Forest for Sensor Trust Classification")
+    print("  DEVIL GRIMOIRE — Dual-Source Model Training Pipeline")
+    print("  (Synthetic Physics Baseline + Real Intel Berkeley Lab Telemetry)")
     print("=" * 70)
     
     # ── Step 1: Generate synthetic training data ────────────────────────────
-    print("\n[1/4] Generating synthetic training data...")
+    print("\n[1/5] Generating baseline synthetic training data...")
     generators = [
         ("Normal",          _generate_normal),
         ("Spike",           _generate_spike),
@@ -250,13 +315,25 @@ def main():
     
     all_samples = []
     for class_name, gen_func in generators:
-        print(f"  → Generating {N_SAMPLES_PER_CLASS} {class_name} samples...")
+        print(f"  → Generating {N_SAMPLES_PER_CLASS} synthetic {class_name} samples...")
         samples = gen_func(N_SAMPLES_PER_CLASS)
         all_samples.extend(samples)
-        print(f"    ✓ {len(samples)} samples generated.")
+        print(f"    ✓ {len(samples)} synthetic samples generated.")
     
-    # ── Step 2: Build feature matrix ────────────────────────────────────────
-    print(f"\n[2/4] Building feature matrix ({len(all_samples)} samples × {len(FEATURE_ORDER)} features)...")
+    # ── Step 2: Add Real Intel Berkeley Research Lab Telemetry ─────────────
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    intel_csv = os.path.join(base_dir, "intel_dataset.csv")
+    if not os.path.exists(intel_csv):
+        intel_csv = os.path.join(base_dir, "my_formatted_data.csv")
+    
+    if os.path.exists(intel_csv):
+        intel_samples = _generate_from_intel(intel_csv, n_samples_per_class=1500)
+        all_samples.extend(intel_samples)
+    
+    print(f"\n  🎯 Total Combined Training Dataset: {len(all_samples)} samples")
+
+    # ── Step 3: Build feature matrix ────────────────────────────────────────
+    print(f"\n[3/5] Building feature matrix ({len(all_samples)} samples × {len(FEATURE_ORDER)} features)...")
     df = pd.DataFrame(all_samples)
     
     X = df[FEATURE_ORDER].values
@@ -271,8 +348,8 @@ def main():
         count = np.sum(y == i)
         print(f"    {label}: {count} ({count/len(y)*100:.1f}%)")
     
-    # ── Step 3: Train Random Forest ─────────────────────────────────────────
-    print("\n[3/4] Training 100-tree Random Forest...")
+    # ── Step 4: Train Random Forest ─────────────────────────────────────────
+    print("\n[4/5] Training 100-tree Random Forest...")
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, random_state=RANDOM_SEED, stratify=y
     )
@@ -289,8 +366,8 @@ def main():
     
     model.fit(X_train, y_train)
     
-    # ── Step 4: Evaluate ────────────────────────────────────────────────────
-    print("\n[4/4] Evaluating model performance...")
+    # ── Step 5: Evaluate ────────────────────────────────────────────────────
+    print("\n[5/5] Evaluating model performance...")
     
     # Cross-validation
     cv_scores = cross_val_score(model, X, y, cv=5, scoring="accuracy")

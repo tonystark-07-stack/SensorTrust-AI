@@ -33,6 +33,7 @@ from app.engine import (
     FEATURE_ORDER,
     CLASS_LABELS,
     WINDOW_LONG,
+    load_model,
 )
 
 
@@ -49,14 +50,36 @@ def evaluate_csv(input_path: str, output_path: str = None):
     print("=" * 70)
     
     # ── Load CSV ─────────────────────────────────────────────────────────────
-    df = pd.read_csv(input_path)
+    # Check if CSV has a header or is headerless (i.e. first row contains numeric values)
+    sample_df = pd.read_csv(input_path, nrows=2)
+    is_headerless = False
+    try:
+        [float(col) for col in sample_df.columns]
+        is_headerless = True
+    except (ValueError, TypeError):
+        is_headerless = False
+
+    if is_headerless:
+        df = pd.read_csv(input_path, header=None)
+        # Check if first column is integer index (0, 1, 2...)
+        if pd.api.types.is_integer_dtype(df.iloc[:, 0]) and (df.iloc[:min(100, len(df)), 0] == range(min(100, len(df)))).all():
+            col_names = ["timestamp"] + [f"TEMP-{i:02d}" for i in range(1, len(df.columns))]
+            df.columns = col_names
+        else:
+            col_names = [f"TEMP-{i+1:02d}" for i in range(len(df.columns))]
+            df.columns = col_names
+            df.insert(0, "timestamp", range(len(df)))
+        print(f"  [i] Headerless CSV detected: automatically assigned columns {list(df.columns)}")
+    else:
+        df = pd.read_csv(input_path)
+
     print(f"\n  Input: {input_path}")
     print(f"  Rows: {len(df)}, Columns: {list(df.columns)}")
     
     # Detect sensor columns
     sensor_cols = [
-        col for col in df.columns
-        if col.lower() not in ("timestamp", "time", "tick", "index", "label", "class")
+        str(col) for col in df.columns
+        if str(col).lower() not in ("timestamp", "time", "tick", "index", "label", "class")
         and pd.api.types.is_numeric_dtype(df[col])
     ]
     print(f"  Detected sensors: {sensor_cols}")
@@ -67,12 +90,19 @@ def evaluate_csv(input_path: str, output_path: str = None):
     missing_buffers = {col: [] for col in sensor_cols}
     results = []
     
+    # Pre-extract numpy matrix for 50x faster iteration than iterrows
+    values_matrix = df[sensor_cols].to_numpy()
+    num_ticks = len(df)
+    
+    # Pre-load model
+    load_model()
+    
     # ── Process each row ─────────────────────────────────────────────────────
-    for tick, (_, row) in enumerate(df.iterrows()):
+    for tick in range(num_ticks):
         readings = {}
-        for col in sensor_cols:
-            val = row[col]
-            is_nan = pd.isna(val)
+        for c_idx, col in enumerate(sensor_cols):
+            val = values_matrix[tick, c_idx]
+            is_nan = np.isnan(val)
             missing_buffers[col].append(is_nan)
             if len(missing_buffers[col]) > WINDOW_LONG * 2:
                 missing_buffers[col] = missing_buffers[col][-WINDOW_LONG * 2:]
@@ -89,7 +119,14 @@ def evaluate_csv(input_path: str, output_path: str = None):
             if len(buffers[col]) > WINDOW_LONG * 2:
                 buffers[col] = buffers[col][-WINDOW_LONG * 2:]
         
-        # Compute features for each sensor
+        # Cohort detection once per tick across all sensors
+        cohort_bufs = {
+            s: np.array(b) for s, b in buffers.items()
+            if len(b) >= WINDOW_LONG
+        }
+        is_cohort, cohort_sids = detect_cohort_event(cohort_bufs)
+
+        # Compute features and classify for each sensor
         for sid in sensor_cols:
             target = np.array(buffers[sid])
             peers = [
@@ -98,13 +135,6 @@ def evaluate_csv(input_path: str, output_path: str = None):
                 if other != sid and len(buffers[other]) > 0
             ]
             features = compute_features(target, peers, raw_missing=missing_buffers[sid])
-            
-            # Cohort detection
-            cohort_bufs = {
-                s: np.array(b) for s, b in buffers.items()
-                if len(b) >= WINDOW_LONG
-            }
-            is_cohort, cohort_sids = detect_cohort_event(cohort_bufs)
             
             # Classify
             try:
@@ -129,8 +159,8 @@ def evaluate_csv(input_path: str, output_path: str = None):
                 "xai_reason": xai,
             })
         
-        if tick % 100 == 0:
-            print(f"  Processing tick {tick}/{len(df)}...")
+        if tick % 250 == 0 or tick == num_ticks - 1:
+            print(f"  Processing tick {tick+1}/{num_ticks}...", flush=True)
     
     # ── Output results ───────────────────────────────────────────────────────
     results_df = pd.DataFrame(results)

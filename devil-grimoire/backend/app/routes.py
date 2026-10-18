@@ -142,7 +142,25 @@ async def upload_csv(file: UploadFile = File(...), speed: int = Query(default=1)
     
     try:
         contents = await file.read()
-        df = pd.read_csv(io.BytesIO(contents))
+        # Check if CSV has headers or is headerless
+        sample_df = pd.read_csv(io.BytesIO(contents), nrows=2)
+        is_headerless = False
+        try:
+            [float(c) for c in sample_df.columns]
+            is_headerless = True
+        except (ValueError, TypeError):
+            is_headerless = False
+
+        if is_headerless:
+            df = pd.read_csv(io.BytesIO(contents), header=None)
+            if pd.api.types.is_integer_dtype(df.iloc[:, 0]) and (df.iloc[:min(100, len(df)), 0] == range(min(100, len(df)))).all():
+                df.columns = ["timestamp"] + [f"TEMP-{i:02d}" for i in range(1, len(df.columns))]
+            else:
+                col_names = [f"TEMP-{i+1:02d}" for i in range(len(df.columns))]
+                df.columns = col_names
+                df.insert(0, "timestamp", range(len(df)))
+        else:
+            df = pd.read_csv(io.BytesIO(contents))
         
         if df.empty:
             return JSONResponse(
